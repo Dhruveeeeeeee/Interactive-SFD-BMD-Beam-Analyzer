@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive SFD & BMD Beam Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121b2d;
+      --panel-2: #17233a;
+      --text: #e5ecf8;
+      --muted: #9fb0cf;
+      --accent: #3da9fc;
+      --good: #42d392;
+      --bad: #ff6b6b;
+      --border: #2a3a57;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Roboto, sans-serif;
+      background: linear-gradient(135deg, #0b1220, #0f1a2e);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 16px;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 380px 1fr;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.25;
+    }
+
+    h1 { font-size: 1.25rem; }
+    h2 { font-size: 1rem; color: var(--accent); }
+    h3 { font-size: 0.95rem; }
+
+    .section { margin-bottom: 14px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    input, select, button {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 0.9rem;
+    }
+
+    button {
+      cursor: pointer;
+      border-color: transparent;
+      background: linear-gradient(135deg, #2d8cf0, #3da9fc);
+      font-weight: 600;
+      transition: transform 0.12s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+
+    .row-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .list {
+      margin-top: 10px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .list-item {
+      background: #0f1728;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.84rem;
+    }
+
+    .list-item button {
+      width: auto;
+      background: #2a3a57;
+      padding: 6px 8px;
+      font-size: 0.8rem;
+    }
+
+    .results {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .metric {
+      background: #0f1728;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .metric .k { color: var(--muted); font-size: 0.78rem; }
+    .metric .v { font-size: 1rem; font-weight: 700; margin-top: 4px; }
+
+    .chart-box {
+      background: #0f1728;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    canvas { width: 100%; height: 260px; }
+
+    .summary {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .warning { color: #ffd166; font-size: 0.82rem; }
+
+    @media (max-width: 1024px) {
+      .container { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      body { background: #fff; color: #000; }
+      .container { margin: 0; max-width: none; }
+      .panel { box-shadow: none; border: 1px solid #999; }
+      button { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="panel">
+      <h1>Interactive SFD & BMD Beam Analyzer</h1>
+
+      <div class="section">
+        <h2>Beam Setup</h2>
+        <div class="grid">
+          <div>
+            <label for="supportType">Support Type</label>
+            <select id="supportType">
+              <option value="simply">Simply Supported</option>
+              <option value="cantilever">Cantilever (Fixed at Left)</option>
+            </select>
+          </div>
+          <div>
+            <label for="beamLength">Beam Length L (m)</label>
+            <input id="beamLength" type="number" min="0.01" step="0.01" value="10" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Add Point Load</h2>
+        <div class="grid">
+          <div>
+            <label for="pointMag">Magnitude (kN, downward +)</label>
+            <input id="pointMag" type="number" step="0.01" value="20" />
+          </div>
+          <div>
+            <label for="pointLoc">Location x (m)</label>
+            <input id="pointLoc" type="number" step="0.01" value="4" />
+          </div>
+        </div>
+        <div class="row-actions">
+          <button id="addPointBtn" type="button">Add Point Load</button>
+          <button id="clearPointBtn" type="button">Clear Point Loads</button>
+        </div>
+        <div id="pointList" class="list"></div>
+      </div>
+
+      <div class="section">
+        <h2>Add UDL</h2>
+        <div class="grid">
+          <div>
+            <label for="udlW">Intensity w (kN/m, downward +)</label>
+            <input id="udlW" type="number" step="0.01" value="8" />
+          </div>
+          <div>
+            <label for="udlStart">Start x (m)</label>
+            <input id="udlStart" type="number" step="0.01" value="2" />
+          </div>
+        </div>
+        <div class="grid" style="margin-top:8px;">
+          <div>
+            <label for="udlEnd">End x (m)</label>
+            <input id="udlEnd" type="number" step="0.01" value="7" />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button id="addUdlBtn" type="button">Add UDL</button>
+          </div>
+        </div>
+        <div class="row-actions">
+          <button id="clearUdlBtn" type="button">Clear UDLs</button>
+          <button id="analyzeBtn" type="button">Analyze Beam</button>
+        </div>
+        <div id="udlList" class="list"></div>
+      </div>
+
+      <div class="section">
+        <button id="printBtn" type="button">Print / Export Summary</button>
+      </div>
+    </section>
+
+    <section class="panel" id="summaryRoot">
+      <h2>Analysis Results</h2>
+      <div id="warning" class="warning"></div>
+      <div class="results" id="resultCards"></div>
+
+      <div class="chart-box">
+        <h3>Shear Force Diagram (SFD)</h3>
+        <canvas id="sfdChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Bending Moment Diagram (BMD)</h3>
+        <canvas id="bmdChart"></canvas>
+      </div>
+
+      <div class="summary" id="summaryText"></div>
+    </section>
+  </div>
+
+  <script>
+    const state = { pointLoads: [], udls: [] };
+    const eps = 1e-9;
+    let sfdChart;
+    let bmdChart;
+
+    const $ = (id) => document.getElementById(id);
+
+    function fmt(num, d = 3) {
+      return Number.isFinite(num) ? Number(num).toFixed(d) : '-';
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function renderLoadLists() {
+      const pointList = $('pointList');
+      pointList.innerHTML = state.pointLoads.length
+        ? state.pointLoads.map((p, i) => `
+            <div class="list-item">
+              <span>P${i + 1}: ${fmt(p.mag, 2)} kN @ x=${fmt(p.x, 2)} m</span>
+              <button type="button" data-type="point" data-index="${i}">Remove</button>
+            </div>`).join('')
+        : '<div class="list-item"><span>No point loads added.</span></div>';
+
+      const udlList = $('udlList');
+      udlList.innerHTML = state.udls.length
+        ? state.udls.map((u, i) => `
+            <div class="list-item">
+              <span>UDL${i + 1}: ${fmt(u.w, 2)} kN/m, x=${fmt(u.a, 2)} to ${fmt(u.b, 2)} m</span>
+              <button type="button" data-type="udl" data-index="${i}">Remove</button>
+            </div>`).join('')
+        : '<div class="list-item"><span>No UDLs added.</span></div>';
+    }
+
+    function addPointLoad() {
+      const L = Number($('beamLength').value);
+      const mag = Number($('pointMag').value);
+      const x = Number($('pointLoc').value);
+      if (!(L > 0) || !Number.isFinite(mag) || !Number.isFinite(x) || x < 0 || x > L) {
+        $('warning').textContent = 'Invalid point load input. Ensure 0 ≤ x ≤ L and numeric values.';
+        return;
+      }
+      state.pointLoads.push({ mag, x });
+      $('warning').textContent = '';
+      renderLoadLists();
+    }
+
+    function addUdl() {
+      const L = Number($('beamLength').value);
+      const w = Number($('udlW').value);
+      let a = Number($('udlStart').value);
+      let b = Number($('udlEnd').value);
+      if (a > b) [a, b] = [b, a];
+      if (!(L > 0) || !Number.isFinite(w) || !Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b > L || b - a <= 0) {
+        $('warning').textContent = 'Invalid UDL input. Ensure 0 ≤ start < end ≤ L and numeric values.';
+        return;
+      }
+      state.udls.push({ w, a, b });
+      $('warning').textContent = '';
+      renderLoadLists();
+    }
+
+    function removeLoad(ev) {
+      const btn = ev.target.closest('button[data-type]');
+      if (!btn) return;
+      const idx = Number(btn.dataset.index);
+      if (btn.dataset.type === 'point') state.pointLoads.splice(idx, 1);
+      if (btn.dataset.type === 'udl') state.udls.splice(idx, 1);
+      renderLoadLists();
+    }
+
+    function evaluateSimplySupported(L, pointLoads, udls) {
+      let totalLoad = 0;
+      let momentAboutA = 0;
+
+      for (const p of pointLoads) {
+        totalLoad += p.mag;
+        momentAboutA += p.mag * p.x;
+      }
+      for (const u of udls) {
+        const len = u.b - u.a;
+        const W = u.w * len;
+        totalLoad += W;
+        momentAboutA += W * (u.a + len / 2);
+      }
+
+      const RB = L > eps ? momentAboutA / L : 0;
+      const RA = totalLoad - RB;
+
+      const V = (x) => {
+        let v = RA;
+        for (const p of pointLoads) if (p.x <= x + eps) v -= p.mag;
+        for (const u of udls) {
+          const len = clamp(x, u.a, u.b) - u.a;
+          if (len > 0) v -= u.w * len;
+        }
+        if (x >= L - eps) v += RB;
+        return v;
+      };
+
+      const M = (x) => {
+        let m = RA * x;
+        for (const p of pointLoads) {
+          const dx = x - p.x;
+          if (dx > 0) m -= p.mag * dx;
+        }
+        for (const u of udls) {
+          const l = clamp(x, u.a, u.b) - u.a;
+          if (l > 0) m -= u.w * l * (x - u.a - 0.5 * l);
+        }
+        return m;
+      };
+
+      return { reactions: { RA, RB }, V, M };
+    }
+
+    function evaluateCantilever(L, pointLoads, udls) {
+      let totalLoad = 0;
+      let fixedMoment = 0;
+
+      for (const p of pointLoads) {
+        totalLoad += p.mag;
+        fixedMoment += p.mag * p.x;
+      }
+      for (const u of udls) {
+        const len = u.b - u.a;
+        const W = u.w * len;
+        totalLoad += W;
+        fixedMoment += W * (u.a + len / 2);
+      }
+
+      const RA = totalLoad;
+      const MA = fixedMoment;
+
+      const V = (x) => {
+        let v = 0;
+        for (const p of pointLoads) if (p.x >= x - eps) v += p.mag;
+        for (const u of udls) {
+          const rightStart = Math.max(x, u.a);
+          const len = Math.max(0, u.b - rightStart);
+          v += u.w * len;
+        }
+        return v;
+      };
+
+      const M = (x) => {
+        let m = 0;
+        for (const p of pointLoads) if (p.x >= x - eps) m -= p.mag * (p.x - x);
+        for (const u of udls) {
+          const rightStart = Math.max(x, u.a);
+          const len = Math.max(0, u.b - rightStart);
+          if (len > 0) {
+            const centroid = rightStart + len / 2;
+            m -= u.w * len * (centroid - x);
+          }
+        }
+        return m;
+      };
+
+      return { reactions: { RA, MA }, V, M };
+    }
+
+    function sampleBeam(L, Vfn, Mfn, n = 501) {
+      const xs = [];
+      const Vs = [];
+      const Ms = [];
+      for (let i = 0; i < n; i++) {
+        const x = (L * i) / (n - 1);
+        xs.push(x);
+        Vs.push(Vfn(x));
+        Ms.push(Mfn(x));
+      }
+      return { xs, Vs, Ms };
+    }
+
+    function findZeroShearPoint(xs, Vs) {
+      let best = { x: xs[0], absV: Math.abs(Vs[0]) };
+      for (let i = 0; i < Vs.length - 1; i++) {
+        const v1 = Vs[i];
+        const v2 = Vs[i + 1];
+        if (Math.abs(v1) < best.absV) best = { x: xs[i], absV: Math.abs(v1) };
+        if ((v1 <= 0 && v2 >= 0) || (v1 >= 0 && v2 <= 0)) {
+          const ratio = Math.abs(v2 - v1) > eps ? Math.abs(v1) / Math.abs(v2 - v1) : 0;
+          return xs[i] + ratio * (xs[i + 1] - xs[i]);
+        }
+      }
+      return best.x;
+    }
+
+    function maxAbs(values) {
+      return values.reduce((acc, v, i) => {
+        const av = Math.abs(v);
+        return av > acc.abs ? { abs: av, value: v, idx: i } : acc;
+      }, { abs: -1, value: 0, idx: 0 });
+    }
+
+    function chartDatasets(xs, ys, posColor, negColor, yLabel) {
+      return {
+        type: 'line',
+        data: {
+          labels: xs,
+          datasets: [
+            {
+              label: `${yLabel} (+)`,
+              data: ys.map((y, i) => ({ x: xs[i], y: Math.max(0, y) })),
+              borderColor: posColor,
+              backgroundColor: posColor + '44',
+              fill: 'origin',
+              pointRadius: 0,
+              tension: 0,
+              borderWidth: 2
+            },
+            {
+              label: `${yLabel} (-)`,
+              data: ys.map((y, i) => ({ x: xs[i], y: Math.min(0, y) })),
+              borderColor: negColor,
+              backgroundColor: negColor + '44',
+              fill: 'origin',
+              pointRadius: 0,
+              tension: 0,
+              borderWidth: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#dce7fb' } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y, 3)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              min: 0,
+              max: xs[xs.length - 1],
+              ticks: { color: '#b8c7e3' },
+              title: { display: true, text: 'x (m)', color: '#c7d6f2' },
+              grid: { color: '#273957' }
+            },
+            y: {
+              ticks: { color: '#b8c7e3' },
+              title: { display: true, text: yLabel, color: '#c7d6f2' },
+              grid: { color: '#273957' }
+            }
+          }
+        }
+      };
+    }
+
+    function renderResults(supportType, reactions, xs, Vs, Ms) {
+      const Vabs = maxAbs(Vs);
+      const Mabs = maxAbs(Ms);
+      const zeroShearX = findZeroShearPoint(xs, Vs);
+
+      const cards = [];
+      if (supportType === 'simply') {
+        cards.push({ k: 'Reaction Rₐ (kN)', v: fmt(reactions.RA) });
+        cards.push({ k: 'Reaction Rᵦ (kN)', v: fmt(reactions.RB) });
+      } else {
+        cards.push({ k: 'Reaction Rₐ (kN)', v: fmt(reactions.RA) });
+        cards.push({ k: 'Fixed Moment Mₐ (kN·m)', v: fmt(reactions.MA) });
+      }
+      cards.push({ k: 'Maximum Shear |V|max (kN)', v: `${fmt(Vabs.abs)} @ x=${fmt(xs[Vabs.idx], 3)} m` });
+      cards.push({ k: 'Maximum Moment |M|max (kN·m)', v: `${fmt(Mabs.abs)} @ x=${fmt(xs[Mabs.idx], 3)} m` });
+
+      $('resultCards').innerHTML = cards
+        .map((c) => `<div class="metric"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`)
+        .join('');
+
+      $('summaryText').textContent = `Estimated zero-shear location: x = ${fmt(zeroShearX, 3)} m. For simply supported beams, this indicates the location of peak bending moment.`;
+
+      const sfdCfg = chartDatasets(xs, Vs, '#42d392', '#ff6b6b', 'Shear V (kN)');
+      const bmdCfg = chartDatasets(xs, Ms, '#f6c177', '#8b7cf6', 'Moment M (kN·m)');
+
+      if (sfdChart) sfdChart.destroy();
+      if (bmdChart) bmdChart.destroy();
+      sfdChart = new Chart($('sfdChart').getContext('2d'), sfdCfg);
+      bmdChart = new Chart($('bmdChart').getContext('2d'), bmdCfg);
+    }
+
+    function analyzeBeam() {
+      const supportType = $('supportType').value;
+      const L = Number($('beamLength').value);
+      if (!(L > 0)) {
+        $('warning').textContent = 'Beam length must be greater than 0.';
+        return;
+      }
+
+      for (const p of state.pointLoads) {
+        if (p.x < 0 || p.x > L) {
+          $('warning').textContent = 'One or more point loads lie outside the beam length.';
+          return;
+        }
+      }
+      for (const u of state.udls) {
+        if (u.a < 0 || u.b > L || u.b <= u.a) {
+          $('warning').textContent = 'One or more UDLs are invalid for the current beam length.';
+          return;
+        }
+      }
+
+      $('warning').textContent = '';
+
+      const engine = supportType === 'simply'
+        ? evaluateSimplySupported(L, state.pointLoads, state.udls)
+        : evaluateCantilever(L, state.pointLoads, state.udls);
+
+      const samples = sampleBeam(L, engine.V, engine.M, 601);
+      renderResults(supportType, engine.reactions, samples.xs, samples.Vs, samples.Ms);
+    }
+
+    function wireEvents() {
+      $('addPointBtn').addEventListener('click', addPointLoad);
+      $('clearPointBtn').addEventListener('click', () => {
+        state.pointLoads = [];
+        renderLoadLists();
+      });
+      $('addUdlBtn').addEventListener('click', addUdl);
+      $('clearUdlBtn').addEventListener('click', () => {
+        state.udls = [];
+        renderLoadLists();
+      });
+      $('pointList').addEventListener('click', removeLoad);
+      $('udlList').addEventListener('click', removeLoad);
+      $('analyzeBtn').addEventListener('click', analyzeBeam);
+      $('printBtn').addEventListener('click', () => window.print());
+      $('beamLength').addEventListener('change', () => $('warning').textContent = '');
+    }
+
+    renderLoadLists();
+    wireEvents();
+    analyzeBeam();
+  </script>
+</body>
+</html>
